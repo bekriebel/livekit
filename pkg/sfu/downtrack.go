@@ -516,6 +516,11 @@ func (d *DownTrack) WritePaddingRTP(bytesToSend int) int {
 
 // Mute enables or disables media forwarding
 func (d *DownTrack) Mute(muted bool) {
+	if d.kind == webrtc.RTPCodecTypeAudio && muted {
+		// Send silent packets to avoid comfort noise static when DTX is used
+		d.writeSilenceRTP()
+	}
+
 	changed, maxLayers := d.forwarder.Mute(muted)
 	if !changed {
 		return
@@ -910,6 +915,67 @@ func (d *DownTrack) writeH264BlankFrame(hdr *rtp.Header, frameEndNeeded bool) (i
 		d.rtpStats.Update(hdr, len(payload), 0, time.Now().UnixNano())
 	}
 	return hdr.MarshalSize() + offset, err
+}
+
+func (d *DownTrack) writeSilenceRTP() error {
+	// don't send if nothing has been sent
+	if !d.rtpStats.IsActive() {
+		return nil
+	}
+
+	// Send for opus audio tracks only
+	if d.kind != webrtc.RTPCodecTypeAudio && d.mime != "audio/opus"{
+		return nil
+	}
+
+	snts, _, err := d.forwarder.GetSnTsForBlankFrames()
+	if err != nil {
+		return err
+	}
+
+	// send a number of silent packets just in case there is loss.
+	for i := 0; i < len(snts); i++ {
+		hdr := rtp.Header{
+			Version:        2,
+			Padding:        false,
+			Marker:         true,
+			PayloadType:    d.payloadType,
+			SequenceNumber: snts[i].sequenceNumber,
+			Timestamp:      snts[i].timestamp,
+			SSRC:           d.ssrc,
+			CSRC:           []uint32{},
+		}
+
+		err = d.writeRTPHeaderExtensions(&hdr)
+		if err != nil {
+			return err
+		}
+
+		payload := []byte{
+			0xf8, 0xff, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		}
+
+		_, err = d.writeStream.WriteRTP(&hdr, payload)
+		if err != nil {
+			d.rtpStats.Update(&hdr, len(payload), 0, time.Now().UnixNano())
+		}
+
+		size := hdr.MarshalSize() + len(payload)
+		for _, f := range d.onPacketSent {
+			f(d, size)
+		}
+	}
+
+	return nil
 }
 
 func (d *DownTrack) handleRTCP(bytes []byte) {
