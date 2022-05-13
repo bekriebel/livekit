@@ -1272,7 +1272,7 @@ func (f *Forwarder) GetSnTsForBlankFrames(frameRate uint32) ([]SnTs, bool, error
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
-	num := RTPBlankFramesMax
+	num := int(RTPBlankFramesSeconds * float32(frameRate))
 	frameEndNeeded := !f.rtpMunger.IsOnFrameBoundary()
 	if frameEndNeeded {
 		num++

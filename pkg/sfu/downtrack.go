@@ -39,7 +39,7 @@ type TrackSender interface {
 const (
 	RTPPaddingMaxPayloadSize      = 255
 	RTPPaddingEstimatedHeaderSize = 20
-	RTPBlankFramesMax             = 6
+	RTPBlankFramesSeconds         = 0.2
 
 	FlagStopRTXOnPLI = true
 

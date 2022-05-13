@@ -1386,10 +1386,10 @@ func TestForwardGetSnTsForBlankFrames(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, frameEndNeeded)
 
-	// there should be one more than RTPBlankFramesMax as one would have been allocated to end previous frame
-	numPadding := RTPBlankFramesMax + 1
 	clockRate := testutils.TestVP8Codec.ClockRate
 	frameRate := uint32(30)
+	// there should be one more than RTPBlankFramesSeconds * framerate as one would have been allocated to end previous frame
+	numPadding := int(RTPBlankFramesSeconds * float32(frameRate)) + 1
 	var sntsExpected = make([]SnTs, numPadding)
 	for i := 0; i < numPadding; i++ {
 		sntsExpected[i] = SnTs{
@@ -1400,8 +1400,8 @@ func TestForwardGetSnTsForBlankFrames(t *testing.T) {
 	require.Equal(t, sntsExpected, snts)
 
 	// now that there is a marker, timestamp should jump on first padding when asked again
-	// also number of padding should be RTPBlankFramesMax
-	numPadding = RTPBlankFramesMax
+	// also number of padding should be RTPBlankFramesSeconds * frameRate
+	numPadding = int(RTPBlankFramesSeconds * float32(frameRate))
 	sntsExpected = sntsExpected[:numPadding]
 	for i := 0; i < numPadding; i++ {
 		sntsExpected[i] = SnTs{
